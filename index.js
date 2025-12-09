@@ -59,22 +59,61 @@ const swaggerDocument = {
   paths: {
     "/inventory": {
       get: {
-        summary: "Отримати список",
-        responses: { 200: { description: "OK" } },
+        summary: "Отримати список всіх речей",
+        responses: { 200: { description: "Список отримано" } },
       },
     },
     "/register": {
       post: {
-        summary: "Реєстрація",
-        responses: { 201: { description: "Created" } },
+        summary: "Реєстрація нового товару",
+        responses: { 201: { description: "Товар створено" } },
       },
+    },
+    "/inventory/{id}": {
+      get: { summary: "Отримати один товар за ID" },
+      put: { summary: "Оновити дані товару" },
+      delete: { summary: "Видалити товар" },
+    },
+    "/inventory/{id}/photo": {
+      get: { summary: "Отримати фото товару" },
+      put: { summary: "Оновити фото товару" },
+    },
+    "/search": {
+      post: { summary: "Пошук товару за ID" },
     },
   },
 };
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// === 5. Ендпоінти API ===
-
+// === ГОЛОВНА СТОРІНКА (МЕНЮ) ===
+app.get("/", (req, res) => {
+  res.send(`
+        <!DOCTYPE html>
+        <html lang="uk">
+        <head>
+            <meta charset="UTF-8">
+            <title>Меню інвентаризації</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 40px; max-width: 600px; margin: 0 auto; }
+                h1 { color: #333; }
+                ul { list-style-type: none; padding: 0; }
+                li { margin: 15px 0; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #f9f9f9; }
+                a { text-decoration: none; color: #007BFF; font-weight: bold; font-size: 18px; display: block; }
+                a:hover { color: #0056b3; }
+            </style>
+        </head>
+        <body>
+            <h1>📦 Сервіс інвентаризації</h1>
+            <ul>
+                <li><a href="/RegisterForm.html">📝 1. Реєстраційна форма</a></li>
+                <li><a href="/docs">📚 2. Документація Swagger</a></li>
+                <li><a href="/SearchForm.html">🔍 3. Знайти річ (Пошук)</a></li>
+                <li><a href="/inventory">📋 4. Список всіх речей (JSON)</a></li>
+            </ul>
+        </body>
+        </html>
+    `);
+});
 // POST /register
 app.post("/register", upload.single("photo"), (req, res) => {
   const { inventory_name, description } = req.body;
@@ -173,25 +212,51 @@ app.delete("/inventory/:id", (req, res) => {
 });
 
 // POST /search
+// POST /search - Пошук з красивим відображенням HTML
 app.post("/search", (req, res) => {
-  const { id, includePhoto, has_photo } = req.body;
-  // Обробка checkbox (може прийти як 'on', true, або рядок 'true')
-  const needsPhoto =
-    includePhoto === "on" || includePhoto === "true" || has_photo === "on";
+  const { id, includePhoto } = req.body;
 
+  // Шукаємо річ у масиві
   const item = inventory.find((i) => i.id === id);
 
-  if (item) {
-    let resultItem = { ...item };
-    if (needsPhoto && item.photo) {
-      resultItem.description += ` (Photo link: /inventory/${item.id}/photo)`;
-    }
-    res.status(200).json(resultItem);
-  } else {
-    res.status(404).send("Not Found");
+  // Якщо нічого не знайшли - показуємо помилку з кнопкою "Назад"
+  if (!item) {
+    return res.status(404).send(`
+            <div style="font-family: Arial; padding: 20px;">
+                <h3 style="color: red;">Not Found</h3>
+                <p>Item with ID <strong>${id}</strong> not found.</p>
+                <a href="/SearchForm.html">Back to Search</a>
+            </div>
+        `);
   }
-});
 
+  // Якщо знайшли - формуємо гарну сторінку
+  let html = `
+        <div style="font-family: Arial; padding: 20px; border: 1px solid #ddd; max-width: 500px;">
+            <h1>Search Result</h1>
+            <p><strong>Name:</strong> ${item.name}</p>
+            <p><strong>Description:</strong> ${item.description}</p>
+            <p><strong>ID:</strong> ${item.id}</p>
+    `;
+
+  // Перевіряємо, чи стоїть галочка і чи є фото
+  if (includePhoto === "on" && item.photo) {
+    html += `
+            <div style="margin-top: 15px;">
+                <strong>Photo:</strong><br>
+                <img src="/inventory/${item.id}/photo" alt="Item Photo" style="max-width: 100%; border-radius: 8px; margin-top: 10px;">
+            </div>
+        `;
+  }
+
+  html += `
+            <br><br>
+            <a href="/SearchForm.html" style="text-decoration: none; color: blue;">&larr; Back to Search</a>
+        </div>
+    `;
+
+  res.send(html);
+});
 // === 6. HTML файли ===
 app.get("/RegisterForm.html", (req, res) => {
   res.sendFile(path.join(__dirname, "RegisterForm.html"));
